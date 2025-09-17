@@ -1,0 +1,92 @@
+{
+  "id": "mod-pallet-return",
+  "name": "Pallet Return Management",
+  "version": "1.0.0",
+  "description": "Manages pallet returns and tracking for shipments",
+  "author": "TMS Team",
+  "license": "MIT",
+  "main": "dist/index.js",
+  "capabilities": {
+    "apis": [
+      {
+        "path": "/pallets",
+        "method": "GET",
+        "handler": "getPallets"
+      },
+      {
+        "path": "/pallets",
+        "method": "POST",
+        "handler": "createPallet"
+      },
+      {
+        "path": "/pallets/:id/return",
+        "method": "POST",
+        "handler": "returnPallet"
+      }
+    ],
+    "events": [
+      {
+        "eventType": "com.tms.shipment.delivered",
+        "handler": "onShipmentDelivered"
+      }
+    ],
+    "uiSlots": [
+      {
+        "slotId": "shipment.tabs",
+        "component": "PalletReturnTab",
+        "order": 10
+      }
+    ],
+    "hooks": [
+      {
+        "hookId": "shipment.after.deliver",
+        "handler": "afterShipmentDeliver",
+        "order": 10
+      }
+    ],
+    "workflows": [
+      {
+        "id": "pallet-return-reminder",
+        "name": "Pallet Return Reminder",
+        "trigger": {
+          "type": "SCHEDULE",
+          "schedule": "0 9 * * *"
+        },
+        "steps": [
+          {
+            "id": "check-overdue",
+            "type": "ACTION",
+            "action": "checkOverduePallets"
+          },
+          {
+            "id": "send-reminders",
+            "type": "ACTION",
+            "action": "sendReminderEmails"
+          }
+        ]
+      }
+    ]
+  },
+  "configuration": {
+    "properties": {
+      "returnDueDays": {
+        "type": "number",
+        "description": "Number of days allowed for pallet return",
+        "default": 30,
+        "minimum": 1,
+        "maximum": 365
+      },
+      "reminderEnabled": {
+        "type": "boolean",
+        "description": "Enable automatic reminder emails",
+        "default": true
+      },
+      "reminderEmail": {
+        "type": "string",
+        "description": "Email address to send reminders from",
+        "pattern": "^[^@]+@[^@]+\\.[^@]+$"
+      }
+    },
+    "required": ["returnDueDays"]
+  }
+}

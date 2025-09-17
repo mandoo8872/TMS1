@@ -1,0 +1,18 @@
+{
+  "name": "@tms/mod-pallet-return",
+  "version": "1.0.0",
+  "private": true,
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@tms/contracts": "file:../../packages/contracts",
+    "@tms/plugin-sdk": "file:../../packages/plugin-sdk"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "typescript": "^5.3.0"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "name": "tms",
+  "version": "1.0.0",
+  "private": true,
+  "description": "TMS Kernel + Plugin SDK System",
+  "scripts": {
+    "dev": "npm run dev --workspace=apps/api & npm run dev --workspace=apps/web",
+    "build": "npm run build --workspace=packages/contracts && npm run build --workspace=packages/plugin-sdk && npm run build --workspace=apps/api && npm run build --workspace=apps/web",
+    "test": "npm test --workspaces",
+    "lint": "npm run lint --workspaces",
+    "format": "prettier --write \"**/*.{ts,tsx,md,json}\"",
+    "db:migrate": "npm run db:migrate --workspace=apps/api",
+    "db:seed": "npm run db:seed --workspace=apps/api"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*",
+    "plugins/*"
+  ],
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "prettier": "^3.2.0",
+    "typescript": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  }
+}

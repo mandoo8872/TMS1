@@ -1,0 +1,276 @@
+// Simplified Prisma schema for SQLite (development)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Party and relations
+model Party {
+  id        String   @id @default(uuid())
+  type      String   // BROKER, CARRIER, DRIVER, SHIPPER, CONSIGNEE
+  name      String
+  code      String   @unique
+  active    Boolean  @default(true)
+  metadata  String?  // JSON string
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  relationsFrom PartyRelation[] @relation("FromParty")
+  relationsTo   PartyRelation[] @relation("ToParty")
+  ordersAsShipper Order[] @relation("ShipperOrders")
+  ordersAsConsignee Order[] @relation("ConsigneeOrders")
+  shipments Shipment[]
+  tenderOffers TenderOffer[]
+  settlementsFrom SettlementLink[] @relation("SettlementFromParty")
+  settlementsTo SettlementLink[] @relation("SettlementToParty")
+
+  @@index([type])
+  @@index([active])
+}
+
+model PartyRelation {
+  id           String   @id @default(uuid())
+  fromPartyId  String
+  toPartyId    String
+  relationType String   // BROKER_CARRIER, CARRIER_DRIVER, SHIPPER_BROKER
+  status       String   // ACTIVE, INACTIVE, SUSPENDED
+  tier         Int
+  metadata     String?  // JSON string
+  validFrom    DateTime
+  validTo      DateTime?
+
+  fromParty Party @relation("FromParty", fields: [fromPartyId], references: [id])
+  toParty   Party @relation("ToParty", fields: [toPartyId], references: [id])
+
+  @@unique([fromPartyId, toPartyId, relationType])
+  @@index([status])
+  @@index([tier])
+}
+
+// Orders
+model Order {
+  id                   String   @id @default(uuid())
+  orderNumber          String   @unique
+  shipperId            String
+  consigneeId          String
+  status               String   // DRAFT, CONFIRMED, IN_TRANSIT, DELIVERED, CANCELLED
+  pickupLocation       String   // JSON string
+  deliveryLocation     String   // JSON string
+  requestedPickupDate  DateTime
+  requestedDeliveryDate DateTime
+  metadata             String?  // JSON string
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  shipper   Party @relation("ShipperOrders", fields: [shipperId], references: [id])
+  consignee Party @relation("ConsigneeOrders", fields: [consigneeId], references: [id])
+  items     OrderItem[]
+  shipments Shipment[]
+  tenders   Tender[]
+
+  @@index([status])
+  @@index([shipperId])
+  @@index([consigneeId])
+}
+
+model OrderItem {
+  id          String   @id @default(uuid())
+  orderId     String
+  description String
+  quantity    Float
+  weight      Float?
+  volume      Float?
+  metadata    String?  // JSON string
+
+  order Order @relation(fields: [orderId], references: [id])
+
+  @@index([orderId])
+}
+
+// Shipments
+model Shipment {
+  id                String   @id @default(uuid())
+  shipmentNumber    String   @unique
+  orderId           String
+  status            String   // PLANNED, DISPATCHED, IN_TRANSIT, DELIVERED, CANCELLED
+  currentStageId    String?
+  assignedCarrierId String?
+  assignedDriverId  String?
+  actualPickupDate  DateTime?
+  actualDeliveryDate DateTime?
+  metadata          String?  // JSON string
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  order    Order @relation(fields: [orderId], references: [id])
+  carrier  Party? @relation(fields: [assignedCarrierId], references: [id])
+  stages   ShipmentStage[]
+  tenders  Tender[]
+  settlements Settlement[]
+
+  @@index([status])
+  @@index([orderId])
+  @@index([assignedCarrierId])
+}
+
+model ShipmentStage {
+  id               String   @id @default(uuid())
+  shipmentId       String
+  stageType        String   // PICKUP, TRANSIT, DELIVERY, CUSTOMS, INSPECTION
+  sequence         Int
+  status           String   // PENDING, IN_PROGRESS, COMPLETED, FAILED, SKIPPED
+  location         String?  // JSON string
+  plannedStartTime DateTime?
+  plannedEndTime   DateTime?
+  actualStartTime  DateTime?
+  actualEndTime    DateTime?
+  metadata         String?  // JSON string
+
+  shipment     Shipment @relation(fields: [shipmentId], references: [id])
+  dependencies StageDependency[] @relation("DependentStage")
+  dependents   StageDependency[] @relation("RequiredStage")
+
+  @@unique([shipmentId, sequence])
+  @@index([status])
+}
+
+model StageDependency {
+  id              String @id @default(uuid())
+  dependentStageId String
+  requiredStageId  String
+
+  dependentStage ShipmentStage @relation("DependentStage", fields: [dependentStageId], references: [id])
+  requiredStage  ShipmentStage @relation("RequiredStage", fields: [requiredStageId], references: [id])
+
+  @@unique([dependentStageId, requiredStageId])
+}
+
+// Tenders
+model Tender {
+  id             String   @id @default(uuid())
+  tenderNumber   String   @unique
+  orderId        String
+  shipmentId     String?
+  status         String   // DRAFT, OPEN, CLOSED, AWARDED, CANCELLED
+  mode           String   // SEQUENTIAL, PARALLEL
+  tier           Int
+  parentTenderId String?
+  offerDeadline  DateTime
+  metadata       String?  // JSON string
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  order      Order @relation(fields: [orderId], references: [id])
+  shipment   Shipment? @relation(fields: [shipmentId], references: [id])
+  parentTender Tender? @relation("TenderCascade", fields: [parentTenderId], references: [id])
+  childTenders Tender[] @relation("TenderCascade")
+  offers     TenderOffer[]
+
+  @@index([status])
+  @@index([mode])
+  @@index([tier])
+}
+
+model TenderOffer {
+  id          String   @id @default(uuid())
+  tenderId    String
+  carrierId   String
+  status      String   // PENDING, SUBMITTED, ACCEPTED, REJECTED, WITHDRAWN
+  priceAmount Float
+  priceCurrency String
+  validUntil  DateTime
+  conditions  String?  // JSON array as string
+  submittedAt DateTime?
+  metadata    String?  // JSON string
+
+  tender  Tender @relation(fields: [tenderId], references: [id])
+  carrier Party @relation(fields: [carrierId], references: [id])
+
+  @@index([status])
+  @@index([tenderId])
+  @@index([carrierId])
+}
+
+// Settlements
+model Settlement {
+  id               String   @id @default(uuid())
+  settlementNumber String   @unique
+  chainId          String
+  shipmentId       String
+  status           String   // PENDING, PROCESSING, COMPLETED, FAILED
+  totalAmount      Float
+  totalCurrency    String
+  metadata         String?  // JSON string
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  shipment Shipment @relation(fields: [shipmentId], references: [id])
+  links    SettlementLink[]
+
+  @@index([chainId])
+  @@index([status])
+}
+
+model SettlementLink {
+  id              String   @id @default(uuid())
+  settlementId    String
+  sequence        Int
+  fromPartyId     String
+  toPartyId       String
+  linkType        String   // PASS_THROUGH, SHARE, DIRECT
+  amount          Float
+  currency        String
+  sharePercentage Float?
+  status          String   // PENDING, PAID, FAILED
+  paidAt          DateTime?
+  metadata        String?  // JSON string
+
+  settlement Settlement @relation(fields: [settlementId], references: [id])
+  fromParty  Party @relation("SettlementFromParty", fields: [fromPartyId], references: [id])
+  toParty    Party @relation("SettlementToParty", fields: [toPartyId], references: [id])
+
+  @@unique([settlementId, sequence])
+  @@index([status])
+}
+
+// Events
+model Event {
+  id              String   @id @default(uuid())
+  specVersion     String
+  eventId         String   @unique
+  source          String
+  type            String
+  dataContentType String?
+  dataSchema      String?
+  subject         String?
+  time            DateTime
+  data            String?  // JSON string
+  createdAt       DateTime @default(now())
+
+  @@index([type])
+  @@index([source])
+  @@index([time])
+}
+
+// Plugins
+model Plugin {
+  id          String   @id @default(uuid())
+  pluginId    String   @unique
+  name        String
+  version     String
+  status      String   // INSTALLED, ENABLED, DISABLED, ERROR
+  manifest    String   // JSON string
+  config      String?  // JSON string
+  installedAt DateTime @default(now())
+  enabledAt   DateTime?
+  disabledAt  DateTime?
+  error       String?
+
+  @@index([status])
+}
