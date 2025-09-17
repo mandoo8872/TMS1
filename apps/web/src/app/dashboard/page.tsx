@@ -13,7 +13,8 @@ import {
   Clock,
   CheckCircle,
   AlertCircle,
-  ArrowRight
+  ArrowRight,
+  Eye
 } from "lucide-react";
 
 export default function DashboardPage() {
@@ -48,7 +49,7 @@ export default function DashboardPage() {
       ]);
 
       // Calculate stats
-      setStats({
+      const newStats = {
         orders: {
           total: orders.length,
           confirmed: orders.filter((o: any) => o.status === 'CONFIRMED').length,
@@ -69,7 +70,7 @@ export default function DashboardPage() {
           pending: settlements.filter((s: any) => s.status === 'PENDING').length,
           completed: settlements.filter((s: any) => s.status === 'COMPLETED').length,
         }
-      });
+      };
 
       // Combine recent activity
       const activity = [
@@ -79,6 +80,8 @@ export default function DashboardPage() {
       ].sort((a, b) => new Date(b.data.createdAt).getTime() - new Date(a.data.createdAt).getTime())
        .slice(0, 8);
 
+      // Update state in a single batch to avoid setState during render
+      setStats(newStats);
       setRecentActivity(activity);
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error);
