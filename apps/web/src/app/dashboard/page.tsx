@@ -1,8 +1,9 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
 import { 
   Package, 
   Truck, 
@@ -11,265 +12,248 @@ import {
   TrendingUp,
   Clock,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  ArrowRight
 } from "lucide-react";
-import { api } from "@/lib/api";
-
-// Mock data for development
-const mockOrders = [
-  {
-    id: "1",
-    orderNumber: "ORD-2024-001",
-    status: "CONFIRMED",
-    pickupLocation: { city: "Chicago" },
-    deliveryLocation: { city: "Los Angeles" },
-    requestedPickupDate: "2024-12-20T08:00:00Z"
-  },
-  {
-    id: "2", 
-    orderNumber: "ORD-2024-002",
-    status: "DRAFT",
-    pickupLocation: { city: "Detroit" },
-    deliveryLocation: { city: "New York" },
-    requestedPickupDate: "2024-12-21T08:00:00Z"
-  }
-];
-
-const mockShipments = [
-  {
-    id: "1",
-    shipmentNumber: "SHP-2024-001",
-    status: "IN_TRANSIT",
-    orderId: "order-1",
-    stages: [
-      { id: "1", status: "COMPLETED" },
-      { id: "2", status: "IN_PROGRESS" },
-      { id: "3", status: "PENDING" }
-    ]
-  }
-];
-
-const mockTenders = [
-  {
-    id: "1",
-    tenderNumber: "TND-2024-001",
-    status: "OPEN",
-    mode: "SEQUENTIAL",
-    tier: 0,
-    offers: [{ id: "1" }, { id: "2" }],
-    offerDeadline: "2024-12-19T18:00:00Z"
-  }
-];
-
-const mockSettlements = [
-  {
-    id: "1",
-    settlementNumber: "STL-2024-001",
-    status: "PENDING"
-  }
-];
 
 export default function DashboardPage() {
-  // Use mock data for now
-  const orders = mockOrders;
-  const shipments = mockShipments;
-  const tenders = mockTenders;
-  const settlements = mockSettlements;
+  const [stats, setStats] = useState({
+    orders: { total: 0, confirmed: 0, draft: 0 },
+    shipments: { total: 0, inTransit: 0, delivered: 0 },
+    tenders: { total: 0, open: 0, awarded: 0 },
+    settlements: { total: 0, pending: 0, completed: 0 }
+  });
+  const [recentActivity, setRecentActivity] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Calculate stats
-  const stats = {
-    totalOrders: orders?.length || 0,
-    activeShipments: shipments?.filter(s => s.status === "IN_TRANSIT").length || 0,
-    openTenders: tenders?.filter(t => t.status === "OPEN").length || 0,
-    pendingSettlements: settlements?.filter(s => s.status === "PENDING").length || 0,
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
+
+  const fetchDashboardData = async () => {
+    try {
+      // Fetch all data in parallel
+      const [ordersRes, shipmentsRes, tendersRes, settlementsRes] = await Promise.all([
+        fetch('/api/orders'),
+        fetch('/api/shipments'),
+        fetch('/api/tenders'),
+        fetch('/api/settlements')
+      ]);
+
+      const [orders, shipments, tenders, settlements] = await Promise.all([
+        ordersRes.json(),
+        shipmentsRes.json(),
+        tendersRes.json(),
+        settlementsRes.json()
+      ]);
+
+      // Calculate stats
+      setStats({
+        orders: {
+          total: orders.length,
+          confirmed: orders.filter((o: any) => o.status === 'CONFIRMED').length,
+          draft: orders.filter((o: any) => o.status === 'DRAFT').length,
+        },
+        shipments: {
+          total: shipments.length,
+          inTransit: shipments.filter((s: any) => s.status === 'IN_TRANSIT').length,
+          delivered: shipments.filter((s: any) => s.status === 'DELIVERED').length,
+        },
+        tenders: {
+          total: tenders.length,
+          open: tenders.filter((t: any) => t.status === 'OPEN').length,
+          awarded: tenders.filter((t: any) => t.status === 'AWARDED').length,
+        },
+        settlements: {
+          total: settlements.length,
+          pending: settlements.filter((s: any) => s.status === 'PENDING').length,
+          completed: settlements.filter((s: any) => s.status === 'COMPLETED').length,
+        }
+      });
+
+      // Combine recent activity
+      const activity = [
+        ...orders.slice(0, 3).map((o: any) => ({ type: 'order', data: o })),
+        ...shipments.slice(0, 3).map((s: any) => ({ type: 'shipment', data: s })),
+        ...tenders.slice(0, 3).map((t: any) => ({ type: 'tender', data: t })),
+      ].sort((a, b) => new Date(b.data.createdAt).getTime() - new Date(a.data.createdAt).getTime())
+       .slice(0, 8);
+
+      setRecentActivity(activity);
+    } catch (error) {
+      console.error('Failed to fetch dashboard data:', error);
+    } finally {
+      setLoading(false);
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="container mx-auto py-8 px-4">
+        <div className="text-center">Loading dashboard...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto py-8 px-4">
-      <h1 className="text-3xl font-bold mb-8">Dashboard</h1>
+      <div className="flex items-center justify-between mb-8">
+        <h1 className="text-3xl font-bold">TMS Dashboard</h1>
+        <div className="text-sm text-gray-500">
+          Last updated: {new Date().toLocaleString()}
+        </div>
+      </div>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <Card>
+        <Card className="hover:shadow-md transition-shadow">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Total Orders
-            </CardTitle>
+            <CardTitle className="text-sm font-medium">Orders</CardTitle>
             <Package className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.totalOrders}</div>
-            <p className="text-xs text-muted-foreground">
-              <TrendingUp className="h-3 w-3 inline mr-1" />
-              +12% from last month
-            </p>
+            <div className="text-2xl font-bold">{stats.orders.total}</div>
+            <div className="text-xs text-muted-foreground mt-1">
+              {stats.orders.confirmed} confirmed • {stats.orders.draft} draft
+            </div>
+            <Link href="/orders">
+              <Button variant="ghost" size="sm" className="mt-2 p-0 h-auto text-blue-600">
+                View all <ArrowRight className="h-3 w-3 ml-1" />
+              </Button>
+            </Link>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="hover:shadow-md transition-shadow">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Active Shipments
-            </CardTitle>
+            <CardTitle className="text-sm font-medium">Shipments</CardTitle>
             <Truck className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.activeShipments}</div>
-            <p className="text-xs text-muted-foreground">
-              <Clock className="h-3 w-3 inline mr-1" />
-              In transit now
-            </p>
+            <div className="text-2xl font-bold">{stats.shipments.total}</div>
+            <div className="text-xs text-muted-foreground mt-1">
+              {stats.shipments.inTransit} in transit • {stats.shipments.delivered} delivered
+            </div>
+            <Link href="/shipments">
+              <Button variant="ghost" size="sm" className="mt-2 p-0 h-auto text-blue-600">
+                View all <ArrowRight className="h-3 w-3 ml-1" />
+              </Button>
+            </Link>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="hover:shadow-md transition-shadow">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Open Tenders
-            </CardTitle>
+            <CardTitle className="text-sm font-medium">Tenders</CardTitle>
             <FileText className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.openTenders}</div>
-            <p className="text-xs text-muted-foreground">
-              <AlertCircle className="h-3 w-3 inline mr-1" />
-              Awaiting offers
-            </p>
+            <div className="text-2xl font-bold">{stats.tenders.total}</div>
+            <div className="text-xs text-muted-foreground mt-1">
+              {stats.tenders.open} open • {stats.tenders.awarded} awarded
+            </div>
+            <Link href="/tenders">
+              <Button variant="ghost" size="sm" className="mt-2 p-0 h-auto text-blue-600">
+                View all <ArrowRight className="h-3 w-3 ml-1" />
+              </Button>
+            </Link>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="hover:shadow-md transition-shadow">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Pending Settlements
-            </CardTitle>
+            <CardTitle className="text-sm font-medium">Settlements</CardTitle>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.pendingSettlements}</div>
-            <p className="text-xs text-muted-foreground">
-              <CheckCircle className="h-3 w-3 inline mr-1" />
-              Ready to process
-            </p>
+            <div className="text-2xl font-bold">{stats.settlements.total}</div>
+            <div className="text-xs text-muted-foreground mt-1">
+              {stats.settlements.pending} pending • {stats.settlements.completed} completed
+            </div>
+            <Link href="/settlements">
+              <Button variant="ghost" size="sm" className="mt-2 p-0 h-auto text-blue-600">
+                View all <ArrowRight className="h-3 w-3 ml-1" />
+              </Button>
+            </Link>
           </CardContent>
         </Card>
       </div>
 
-      {/* Recent Activity Tabs */}
-      <Tabs defaultValue="orders" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="orders">Recent Orders</TabsTrigger>
-          <TabsTrigger value="shipments">Active Shipments</TabsTrigger>
-          <TabsTrigger value="tenders">Open Tenders</TabsTrigger>
-          <TabsTrigger value="events">Event Log</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="orders">
-          <Card>
-            <CardHeader>
-              <CardTitle>Recent Orders</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {orders?.slice(0, 5).map((order) => (
-                  <div key={order.id} className="flex items-center justify-between p-4 border rounded-lg">
-                    <div>
-                      <p className="font-medium">{order.orderNumber}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {order.pickupLocation.city} → {order.deliveryLocation.city}
-                      </p>
+      {/* Recent Activity */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent Activity</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {recentActivity.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              No recent activity.
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {recentActivity.map((activity, index) => (
+                <div key={index} className="flex items-center space-x-4 p-3 border rounded-lg hover:bg-gray-50">
+                  <div className="flex-shrink-0">
+                    {activity.type === 'order' && <Package className="h-5 w-5 text-blue-600" />}
+                    {activity.type === 'shipment' && <Truck className="h-5 w-5 text-green-600" />}
+                    {activity.type === 'tender' && <FileText className="h-5 w-5 text-orange-600" />}
+                  </div>
+                  
+                  <div className="flex-1">
+                    <div className="font-medium">
+                      {activity.type === 'order' && `Order ${activity.data.orderNumber}`}
+                      {activity.type === 'shipment' && `Shipment ${activity.data.shipmentNumber}`}
+                      {activity.type === 'tender' && `Tender ${activity.data.tenderNumber}`}
                     </div>
-                    <div className="text-right">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                        ${order.status === 'CONFIRMED' ? 'bg-green-100 text-green-800' : 
-                          order.status === 'DRAFT' ? 'bg-gray-100 text-gray-800' : 
-                          'bg-blue-100 text-blue-800'}`}>
-                        {order.status}
-                      </span>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        {new Date(order.requestedPickupDate).toLocaleDateString()}
-                      </p>
+                    <div className="text-sm text-gray-600">
+                      Status: {activity.data.status} • {new Date(activity.data.createdAt).toLocaleString()}
                     </div>
                   </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+                  
+                  <Button variant="ghost" size="sm">
+                    <Eye className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
-        <TabsContent value="shipments">
-          <Card>
-            <CardHeader>
-              <CardTitle>Active Shipments</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {shipments?.filter(s => s.status !== 'DELIVERED' && s.status !== 'CANCELLED')
-                  .slice(0, 5).map((shipment) => (
-                  <div key={shipment.id} className="flex items-center justify-between p-4 border rounded-lg">
-                    <div>
-                      <p className="font-medium">{shipment.shipmentNumber}</p>
-                      <p className="text-sm text-muted-foreground">
-                        Order: {shipment.orderId}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                        ${shipment.status === 'IN_TRANSIT' ? 'bg-blue-100 text-blue-800' : 
-                          shipment.status === 'DISPATCHED' ? 'bg-yellow-100 text-yellow-800' : 
-                          'bg-gray-100 text-gray-800'}`}>
-                        {shipment.status}
-                      </span>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        {shipment.stages.filter(s => s.status === 'COMPLETED').length}/{shipment.stages.length} stages
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+      {/* Quick Actions */}
+      <div className="mt-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card className="hover:shadow-md transition-shadow cursor-pointer">
+          <CardContent className="p-6 text-center">
+            <Package className="h-8 w-8 mx-auto text-blue-600 mb-2" />
+            <h3 className="font-semibold mb-1">Create Order</h3>
+            <p className="text-sm text-gray-600">Start a new shipping order</p>
+          </CardContent>
+        </Card>
 
-        <TabsContent value="tenders">
-          <Card>
-            <CardHeader>
-              <CardTitle>Open Tenders</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {tenders?.filter(t => t.status === 'OPEN').slice(0, 5).map((tender) => (
-                  <div key={tender.id} className="flex items-center justify-between p-4 border rounded-lg">
-                    <div>
-                      <p className="font-medium">{tender.tenderNumber}</p>
-                      <p className="text-sm text-muted-foreground">
-                        Mode: {tender.mode} | Tier: {tender.tier}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-medium">{tender.offers.length} offers</p>
-                      <p className="text-sm text-muted-foreground">
-                        Deadline: {new Date(tender.offerDeadline).toLocaleString()}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+        <Card className="hover:shadow-md transition-shadow cursor-pointer">
+          <CardContent className="p-6 text-center">
+            <Truck className="h-8 w-8 mx-auto text-green-600 mb-2" />
+            <h3 className="font-semibold mb-1">Track Shipment</h3>
+            <p className="text-sm text-gray-600">Monitor shipment progress</p>
+          </CardContent>
+        </Card>
 
-        <TabsContent value="events">
-          <Card>
-            <CardHeader>
-              <CardTitle>Recent Events</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-muted-foreground">Event log coming soon...</p>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+        <Card className="hover:shadow-md transition-shadow cursor-pointer">
+          <CardContent className="p-6 text-center">
+            <FileText className="h-8 w-8 mx-auto text-orange-600 mb-2" />
+            <h3 className="font-semibold mb-1">Create Tender</h3>
+            <p className="text-sm text-gray-600">Launch cascade tender</p>
+          </CardContent>
+        </Card>
+
+        <Card className="hover:shadow-md transition-shadow cursor-pointer">
+          <CardContent className="p-6 text-center">
+            <DollarSign className="h-8 w-8 mx-auto text-purple-600 mb-2" />
+            <h3 className="font-semibold mb-1">Process Settlement</h3>
+            <p className="text-sm text-gray-600">Manage payment flows</p>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

@@ -23,9 +23,11 @@ export const EventTypes = {
   
   // Tender events
   TENDER_CREATED: 'com.tms.tender.created',
+  TENDER_UPDATED: 'com.tms.tender.updated',
   TENDER_OPENED: 'com.tms.tender.opened',
   TENDER_CLOSED: 'com.tms.tender.closed',
   TENDER_AWARDED: 'com.tms.tender.awarded',
+  TENDER_CANCELLED: 'com.tms.tender.cancelled',
   TENDER_CASCADED: 'com.tms.tender.cascaded',
   
   // Offer events
